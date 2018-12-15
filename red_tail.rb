@@ -41,28 +41,34 @@ class RedTail
     def gravity_turn
         turn_angle = 0 
 
-        case vessel.flight.velocity
-        when  75
-            puts "Beginning gravity turn..."
-            5.times do 
-                turn_angle += 1
-                ap.target_pitch_and_heading(90-turn_angle, 90)
-                sleep(1)
-            end 
+        loop do 
+            sleep(1)
+            break if vessel.flight.velocity >=75
         end 
 
-        case vessel.flight.prograde
-        when 85
-            ctrl.sas_mode = :prograde 
-            puts "Locking AA to vessel prograde"
+        puts "Beginning gravity turn..."
+        5.times do 
+            turn_angle += 1
+            ap.target_pitch_and_heading(90-turn_angle, 90)
+            sleep(1)
         end 
+
+        loop do 
+            sleep(1)
+            break if vessel.flight.prograde >= 85
+        end 
+
+        ctrl.sas_mode = :prograde
+        puts "Locking AA to vessel prograde"
     end 
 
     #Stage when vessel thrust == 0 
     def stage_by_thrust
-        case vessel.thrust 
-        when vessel.thrust == 0 
-            ctrl.activate_next_stage 
+        loop do 
+            if vessel.thrust == 0 
+                ctrl.activate_next_stage
+                break
+            end 
         end 
     end 
 
