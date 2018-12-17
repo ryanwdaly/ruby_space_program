@@ -42,7 +42,7 @@ class RedTail
         turn_angle = 0 
 
         loop do 
-            sleep(1)
+            sleep(0.5)
             break if vessel.flight.velocity >=75
         end 
 
@@ -72,12 +72,13 @@ class RedTail
         end 
     end 
 
-    #-Stage when fuel is less than 12%
-    #-Stage when thrust == 0 
     #-Assumes 2 tiered fairing stages
     def stage_by_fuel_percent
-        return 0
-        #ctrl.activate_next_stage when fuel_percent(vessel, fuel_type) <= given_percent
+        loop do 
+            break if fuel_percent(vessel, fuel_type) <= given_percent
+        end 
+        ctrl.activate_next_stage
+        stage_by_thrust
     end 
 
     def fuel_percent
