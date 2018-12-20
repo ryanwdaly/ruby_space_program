@@ -16,7 +16,7 @@ class RedTail
     def script
         
         pre_launch_prep
-        stage_launch_pad            #0
+        launch           #0
         gravity_turn            
         stage_by_fuel_percent       #1
      
@@ -30,7 +30,7 @@ class RedTail
         ctrl.throttle = 1
     end 
 
-    def stage_launch_pad
+    def launch
         ctrl.activate_next_stage
         puts "Starting Engines..."
         sleep(4)
@@ -89,7 +89,10 @@ class RedTail
     end 
 
     def decent
-        puts "I need more code"
+        loop do 
+            sleep(1.0)
+            ctr.sas_mode = :prograde if vessel.flight.mean_altitude <= 125000
+        end 
     end
 
     binding.pry
