@@ -9,7 +9,7 @@ class CronosAutonomous
     attr_reader :client, :vessel, :ctrl, :ap, :target_apoapsis, :target_periapsis, :target_inclination, 
         :first_twr, :second_twr, :final_twr, :end_alt, :final_pitch, :ship_altitude, :target_pitch,
         :target_heading, :flight, :vertical_speed, :horizontal_speed, :orbit, :time_to_apoapsis, :time_to_periapsis, 
-        :current_acceleration, :feed_ap, :vel_pot, :ut
+        :current_acceleration, :feed_ap, :vel_pot
 
     
 
@@ -49,7 +49,7 @@ class CronosAutonomous
         @feed_ap = orbit.apoapsis_altitude + (vertical_speed * time_to_apoapsis) + 
                     (0.5 * (current_acceleration * Math.sin(prograde_pitch) - 9.81) * (time_to_apoapsis ** 2))
         @vel_pot = (2 * current_acceleration * time_to_apoapsis) + horizontal_speed 
-        @ut = client.space_center.ut
+
         # feedAP to SHIP:APOAPSIS + (SHIP:VERTICALSPEED * TTA) + (0.5 * (currentAcc * sin(progradePitch) - 9.81) * (TTA ^ 2))
 
     end 
@@ -61,7 +61,6 @@ class CronosAutonomous
     end 
 
     def pre_launch_prep
-        # system("clear")
         puts "Pre launch preperation..."
         ctrl.sas = false
         ap.engage
@@ -81,109 +80,110 @@ class CronosAutonomous
         
         ctrl.activate_next_stage
         puts "Liftoff!"
-        
     end 
 
     def gravity_turn
-        gravity_turn_complete = false 
-        pitch_started = false
-        launch_tower_jettisoned = false 
-        stage = 1
-        update_flight_variables
-        vessel_pitch = 90
-
-        until gravity_turn_complete
-            
-            if ship_altitude < 600
-                ap.target_pitch_and_heading(vessel_pitch, 90)
-               
-            elsif !pitch_started 
-                puts "Starting Pitch"
-                
-                time_of_launch = ut
-                pitch_started = true 
-
-            elsif vessel_pitch > 30 && stage == 1
-                pitch_rate = 0.6
-                pitch_subtraction = ((ut - time_of_launch) * pitch_rate)
-                vessel_pitch = 90 - pitch_subtraction
-                ap.target_pitch_and_heading(vessel_pitch, target_heading)
-
-            elsif vessel_pitch <= 30 && stage == 1 && vessel.thrust > 1
-                
-                ap.target_pitch_and_heading(30, target_heading)
-            
-            elsif stage == 1 && vessel.thrust < 1
-                puts "Staging..."
+        
+        
+        while ship_altitude < 90000
+            if vessel.thrust < 1
                 ctrl.activate_next_stage
                 sleep(5)
                 ctrl.activate_next_stage
-                sleep(1)
-                puts "Second Stage Achieve"
-                ap.target_pitch_and_heading(vessel_pitch, target_heading)
-                vessel_pitch = 30
-                stage += 1
-                time_of_launch = ut
-
-
-   
-            elsif orbit.apoapsis_altitude  > 159000 && stage == 2
-            tr = orbit.radius + ship_altitude
-        fc = vessel.mass * orbit.speed**2/tr
-        fg = (9.81 * vessel.mass * (5.972 * 10**24))/(tr**2)
-        fs = fg-fc
-
-        insin = [[fs/vessel.thrust, 0.01].max, Math.sin(45)].min
-        vacuum_pitch = Math.asin(insin)
-                ap.target_pitch_and_heading(vacuum_pitch, target_heading)
-
-
-#                 WHEN SHIP:APOAPSIS > 159000 AND situation = "not_staging" THEN {
-#                 LOCK Tr TO BODY:RADIUS + SHIP:ALTITUDE.
-#                 LOCK Fc TO SHIP:MASS * SHIP:VELOCITY:ORBIT:MAG^2/Tr.
-#                 LOCK Fg TO (CONSTANT:G * SHIP:MASS * BODY:MASS)/(Tr^2).
-                
-#                 LOCK Fs TO Fg - Fc.
-#                 LOCK insin TO MIN(MAX(Fs/SHIP:MAXTHRUST,0.01),SIN(45)).
-#                 LOCK vacuum_pitch TO ARCSIN(insin).	
-                
-#                 PRESERVE.
-# }
-
-            elsif vessel.thrust < 1 && stage == 2 && launch_tower_jettisoned == true 
-                puts "here"
-                ctrl.activate_next_stage
-                ap.target_pitch_and_heading(0, target_heading)
-                if orbit.periapsis_altitude >= 250000
-                    ctrl.throttle = 0 
-                    puts "Orbit Achieved"
-                    gravity_turn_complete = true
-                end 
-            end 
-
+            end
+            ap.target_pitch_and_heading(target_pitch, target_heading)
+            sleep(0.001)
             render_flight_variables
-            sleep(0.01)
         end 
+
+        # Decouple escape tower
+        ctrl.activate_next_stage
+        adjusted_target_pitch = target_pitch
+
+        while orbit.apoapsis_altitude < target_periapsis
+            ctrl.activate_next_stage if vessel.thrust < 1
+
+            if (feed_ap < target_periapsis || vel_pot < 7400) && adjusted_target_pitch < 20 
+                adjusted_target_pitch += 0.05
+                sleep(0.01)
+            end 
+            
+            if (feed_ap > target_periapsis || vel_pot > 7400) && adjusted_target_pitch > -10
+                adjusted_target_pitch -= 0.05
+                sleep(0.01)
+            end 
+            ap.target_pitch_and_heading(adjusted_target_pitch, target_heading)
+            render_flight_variables
+        end 
+
+        while (orbit.apoapsis_altitude < (target_apoapsis * 1.01)) && orbit.periapsis_altitude < 160000
+            if vertical_speed > 20.0 && adjusted_target_pitch > -10
+                adjusted_target_pitch -= 0.12
+                ap.target_pitch_and_heading(adjusted_target_pitch, target_heading)
+                sleep(0.01)
+            elsif (vertical_speed < -20.0) && adjusted_target_pitch < 15
+                adjusted_target_pitch += 0.12
+                ap.target_pitch_and_heading(adjusted_target_pitch, target_heading)
+                sleep(0.01)
+            elsif (vertical_speed >= -20.0) && adjusted_target_pitch <= 20.0
+                if adjusted_target_pitch > 0
+                    adjusted_target_pitch -= 0.12
+                    ap.target_pitch_and_heading(adjusted_target_pitch, target_heading)
+                    sleep(0.01)
+                end 
+                if adjusted_target_pitch < 0
+                    adjusted_target_pitch += 0.12
+                    ap.target_pitch_and_heading(adjusted_target_pitch, target_heading)
+                    sleep(0.01)
+                end 
+            end       
+        end 
+
         
- 
-        puts "Finished"
 
+        # 	if mode = 8 {
+# 		if SHIP:APOAPSIS > targetPeriapsis {
+# 			lock throttle to 0.
+# 			timetoAP().
+# 			if TTA > 20{
+# 				set warp to 2.
+# 			}
+# 			if TTA < 20{
+# 				set warp to 0.
+# 				lock steering to heading (90,0) + R(0,0,startRoll).
+# 				wait 5.
+# 				lock throttle to 1.
+# 				set mode to 9.
+# 			}
+# 		}
+			
+# 		if SHIP:APOAPSIS < targetPeriapsis {
+# 			lock steering to heading (90,0) + R(0,0,startRoll).
+# 			wait 1.
+# 			lock throttle to 0.2.
+# 		}
+# 	}
+
+        ctrl.throttle = 0
+
+        # while orbit.periapsis_altitude < target_apoapsis
+        #     ctrl.activate_next_stage if vessel.thrust < 1
+        #     ap.target_pitch_and_heading(0, target_heading)
+        # end 
     end 
-
-
 
     def render_flight_variables
         update_flight_variables
         
-        # render_str = ""
+        render_str = ""
 
-        # render_str << "############# Flight Variables ###############\n"
-        # # render_str << "Target Pitch: #{target_pitch}\n"
-      
-        
-        
-        
-        # puts render_str
+        render_str << "############# Flight Variables ###############\n"
+        # render_str << "Target Pitch: #{target_pitch}\n"
+        render_str << "Angle of Attack: #{angle_of_attack}\n"
+        render_str << "Orbital Prograde Pitch: #{prograde_pitch}\n"
+        render_str << "Current Acceleration: #{current_acceleration}\n"
+        system ("clear")
+        puts render_str
         
     end 
 
@@ -192,6 +192,7 @@ class CronosAutonomous
             u[1]*v[2] - u[2]*v[1],
             u[2]*v[0] - u[0]*v[2],
             u[0]*v[1] - u[1]*v[0]]
+        
     end
 
     
@@ -281,10 +282,41 @@ class CronosAutonomous
         vm = magnitude(v)
         return Math.acos(dp / (um*vm)) * (180.0 / Math::PI)
     end 
+  
 
-    
     puts 'Loaded.'
 end 
 
+
+
 x = CronosAutonomous.new
 x.run
+
+##########################################################################
+ 
+	
+
+	
+	
+# 	if mode = 9 {
+# 		lock throttle to 0.
+# 		unlock steering.
+# 		print "Launch Program Concluded".
+# 		set mode to 0.
+
+# 	}
+
+# }
+
+# function timetoAP{
+# 	set TTA to ETA:APOAPSIS.
+
+# 	if ETA:APOAPSIS > (SHIP:OBT:PERIOD / 2) {
+# 		set TTA to ETA:APOAPSIS - SHIP:OBT:PERIOD.
+# 	}
+# }
+
+# function proPitch {
+	
+# 	return 90 - vang(ship:up:vector, ship:velocity:surface).
+# }

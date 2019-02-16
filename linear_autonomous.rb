@@ -99,7 +99,6 @@ class CronosAutonomous
                
             elsif !pitch_started 
                 puts "Starting Pitch"
-                
                 time_of_launch = ut
                 pitch_started = true 
 
@@ -110,46 +109,34 @@ class CronosAutonomous
                 ap.target_pitch_and_heading(vessel_pitch, target_heading)
 
             elsif vessel_pitch <= 30 && stage == 1 && vessel.thrust > 1
-                
                 ap.target_pitch_and_heading(30, target_heading)
             
             elsif stage == 1 && vessel.thrust < 1
+                vessel_pitch = 30
                 puts "Staging..."
+                ap.target_pitch_and_heading(vessel_pitch, target_heading)
                 ctrl.activate_next_stage
+                stage += 1
                 sleep(5)
                 ctrl.activate_next_stage
                 sleep(1)
-                puts "Second Stage Achieve"
-                ap.target_pitch_and_heading(vessel_pitch, target_heading)
-                vessel_pitch = 30
-                stage += 1
+                puts "Second Stage Achieved"
                 time_of_launch = ut
 
 
    
-            elsif orbit.apoapsis_altitude  > 159000 && stage == 2
-            tr = orbit.radius + ship_altitude
-        fc = vessel.mass * orbit.speed**2/tr
-        fg = (9.81 * vessel.mass * (5.972 * 10**24))/(tr**2)
-        fs = fg-fc
+            elsif vessel_pitch > 0 && stage == 2
+                pitch_rate = 0.07
+                starting_pitch = 35
+                pitch_subtraction = (ut - time_of_launch) * 0.065
+                vessel_pitch = starting_pitch - pitch_subtraction
+                ap.target_pitch_and_heading(vessel_pitch, target_heading)
 
-        insin = [[fs/vessel.thrust, 0.01].max, Math.sin(45)].min
-        vacuum_pitch = Math.asin(insin)
-                ap.target_pitch_and_heading(vacuum_pitch, target_heading)
-
-
-#                 WHEN SHIP:APOAPSIS > 159000 AND situation = "not_staging" THEN {
-#                 LOCK Tr TO BODY:RADIUS + SHIP:ALTITUDE.
-#                 LOCK Fc TO SHIP:MASS * SHIP:VELOCITY:ORBIT:MAG^2/Tr.
-#                 LOCK Fg TO (CONSTANT:G * SHIP:MASS * BODY:MASS)/(Tr^2).
-                
-#                 LOCK Fs TO Fg - Fc.
-#                 LOCK insin TO MIN(MAX(Fs/SHIP:MAXTHRUST,0.01),SIN(45)).
-#                 LOCK vacuum_pitch TO ARCSIN(insin).	
-                
-#                 PRESERVE.
-# }
-
+                if ship_altitude >= 70000 && !launch_tower_jettisoned
+                    ctrl.activate_next_stage
+                    launch_tower_jettisoned = true 
+                end     
+            
             elsif vessel.thrust < 1 && stage == 2 && launch_tower_jettisoned == true 
                 puts "here"
                 ctrl.activate_next_stage
@@ -169,8 +156,6 @@ class CronosAutonomous
         puts "Finished"
 
     end 
-
-
 
     def render_flight_variables
         update_flight_variables
@@ -192,6 +177,7 @@ class CronosAutonomous
             u[1]*v[2] - u[2]*v[1],
             u[2]*v[0] - u[0]*v[2],
             u[0]*v[1] - u[1]*v[0]]
+        
     end
 
     
@@ -281,8 +267,8 @@ class CronosAutonomous
         vm = magnitude(v)
         return Math.acos(dp / (um*vm)) * (180.0 / Math::PI)
     end 
+  
 
-    
     puts 'Loaded.'
 end 
 
